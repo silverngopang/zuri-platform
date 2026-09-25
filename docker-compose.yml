@@ -1,0 +1,23 @@
+services:
+  backend:
+    build: ./zuriapp-backend
+    ports:
+      - "5000:5000"
+    env_file:
+      - ./zuriapp-backend/.env
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:5000/api/store"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  frontend:
+    build:
+      context: ./zuriapp-frontend
+      args:
+        VITE_API_URL: http://localhost:5000
+    ports:
+      - "8080:80"
+    depends_on:
+      backend:
+        condition: service_healthy
