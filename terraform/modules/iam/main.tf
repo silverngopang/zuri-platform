@@ -19,11 +19,18 @@ resource "aws_iam_role_policy" "secrets_read" {
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = ["secretsmanager:GetSecretValue"]
-      Resource = "arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:zuri/${var.env}/*"
-    }]
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["secretsmanager:GetSecretValue"]
+        Resource = "arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:zuri/${var.env}/*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["ssm:GetParameter"]
+        Resource = "arn:aws:ssm:${var.region}:${var.account_id}:parameter/zuri/${var.env}/*"
+      }
+    ]
   })
 }
 
