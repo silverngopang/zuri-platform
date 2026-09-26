@@ -19,27 +19,36 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-2
 
+      - name: Push compose file to SSM Parameter Store
+        run: |
+          COMPOSE=$(cat docker/docker-compose.ec2.yml | sed "s|__API_SECRET_KEY__|${{ secrets.API_SECRET_KEY }}|g")
+          aws ssm put-parameter \
+            --region us-east-2 \
+            --name "/zuri/dev/docker-compose" \
+            --value "$COMPOSE" \
+            --type String \
+            --overwrite
+
       - name: Deploy via SSM
         run: |
-          aws ssm send-command \
+          COMMAND_ID=$(aws ssm send-command \
             --region us-east-2 \
             --instance-ids i-07efd01962f560eb4 \
             --document-name "AWS-RunShellScript" \
             --parameters 'commands=[
               "mkdir -p /opt/zuri",
-              "cd /opt/zuri",
-              "cat > /opt/zuri/docker-compose.yml << '"'"'EOF'"'"'\nservices:\n  backend:\n    image: silverspark/zuriapp-backend:latest\n    ports:\n      - \"5000:5000\"\n    environment:\n      - PORT=5000\n      - STORE_NAME=Zuri Market\n      - API_SECRET_KEY=${{ secrets.API_SECRET_KEY }}\n    restart: unless-stopped\n    healthcheck:\n      test: [\"CMD\", \"wget\", \"-qO-\", \"http://localhost:5000/api/store\"]\n      interval: 30s\n      timeout: 10s\n      retries: 3\n  frontend:\n    image: silverspark/zuriapp-frontend:latest\n    ports:\n      - \"80:80\"\n    depends_on:\n      backend:\n        condition: service_healthy\n    restart: unless-stopped\nEOF",
+              "aws ssm get-parameter --region us-east-2 --name /zuri/dev/docker-compose --query Parameter.Value --output text > /opt/zuri/docker-compose.yml",
               "docker compose -f /opt/zuri/docker-compose.yml pull",
               "docker compose -f /opt/zuri/docker-compose.yml up -d",
               "docker compose -f /opt/zuri/docker-compose.yml ps"
             ]' \
-            --output text \
-            --query "Command.CommandId" > /tmp/command_id.txt
-          echo "Command ID: $(cat /tmp/command_id.txt)"
-          sleep 30
+            --query "Command.CommandId" \
+            --output text)
+          echo "Command ID: $COMMAND_ID"
+          sleep 60
           aws ssm get-command-invocation \
             --region us-east-2 \
-            --command-id $(cat /tmp/command_id.txt) \
+            --command-id $COMMAND_ID \
             --instance-id i-07efd01962f560eb4 \
             --query "[Status,StandardOutputContent,StandardErrorContent]" \
             --output text
