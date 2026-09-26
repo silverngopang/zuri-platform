@@ -1,0 +1,51 @@
+name: CD — Deploy to EC2
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd /opt/zuri || (sudo mkdir -p /opt/zuri && sudo chown ubuntu:ubuntu /opt/zuri && cd /opt/zuri)
+            cat > docker-compose.yml << 'EOF'
+            services:
+              backend:
+                image: silverspark/zuriapp-backend:latest
+                ports:
+                  - "5000:5000"
+                environment:
+                  - PORT=5000
+                  - STORE_NAME=Zuri Market
+                  - API_SECRET_KEY=${{ secrets.API_SECRET_KEY }}
+                restart: unless-stopped
+                healthcheck:
+                  test: ["CMD", "wget", "-qO-", "http://localhost:5000/api/store"]
+                  interval: 30s
+                  timeout: 10s
+                  retries: 3
+
+              frontend:
+                image: silverspark/zuriapp-frontend:latest
+                ports:
+                  - "80:80"
+                depends_on:
+                  backend:
+                    condition: service_healthy
+                restart: unless-stopped
+            EOF
+            docker compose pull
+            docker compose up -d
+            docker compose ps
